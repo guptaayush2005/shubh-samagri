@@ -129,11 +129,13 @@ async function createLocalOrder(customer, totals, paymentMethod, paymentStatus, 
 }
 
 async function handle(req, res) {
-  const url = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
+  const reqUrl = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
+  const targetPath = reqUrl.searchParams.get('origPath') || req.headers['x-matched-path'] || req.headers['x-invoke-path'] || req.url;
+  const url = new URL(targetPath, `http://${req.headers.host || 'localhost'}`);
   const pathname = decodeURIComponent(url.pathname);
   if (pathname.startsWith('/api/')) {
-    if (req.method === 'GET' && pathname === '/api/products') return send(res, 200, await catalog());
-    if (req.method === 'GET' && pathname === '/api/config') return send(res, 200, { paymentsEnabled:Boolean(razorpayKeyId && razorpayKeySecret), razorpayKeyId:razorpayKeyId || null });
+    if ((req.method === 'GET' || req.method === 'HEAD') && pathname === '/api/products') return send(res, 200, await catalog());
+    if ((req.method === 'GET' || req.method === 'HEAD') && pathname === '/api/config') return send(res, 200, { paymentsEnabled:Boolean(razorpayKeyId && razorpayKeySecret), razorpayKeyId:razorpayKeyId || null });
     if (req.method === 'POST' && pathname === '/api/admin/login') {
       const input = await body(req);
       if (!equalSecret(input.password || '', adminPassword)) return send(res, 401, { error:'Password sahi nahi hai.' });
@@ -151,7 +153,7 @@ async function handle(req, res) {
       if (products.some(product => !product.id || !product.name || !product.category || product.price <= 0) || new Set(products.map(product => product.id)).size !== products.length) return send(res, 400, { error:'Products ke naam, ID aur rates check karein.' });
       await writeJson(productsFile, products); return send(res, 200, products);
     }
-    if (req.method === 'GET' && pathname === '/api/admin/orders') return send(res, 200, await allOrders());
+    if ((req.method === 'GET' || req.method === 'HEAD') && pathname === '/api/admin/orders') return send(res, 200, await allOrders());
     if (req.method === 'PATCH' && pathname.startsWith('/api/admin/orders/')) {
       const id = pathname.split('/').at(-1); const input = await body(req);
       const allowed = ['New','Processing','Packed','Shipped','Delivered','Cancelled'];
