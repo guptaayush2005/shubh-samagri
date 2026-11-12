@@ -1,0 +1,13 @@
+{
+  "name": "shubh-samagri-store",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Multi-page responsive puja samagri e-commerce store with admin panel and checkout",
+  "scripts": {
+    "start": "node server.mjs"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
