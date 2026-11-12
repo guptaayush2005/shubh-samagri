@@ -8,6 +8,7 @@ const root = path.dirname(fileURLToPath(import.meta.url));
 const dataPath = path.join(root, 'data');
 const productsFile = path.join(dataPath, 'products.json');
 const ordersFile = path.join(dataPath, 'orders.json');
+const settingsFile = path.join(dataPath, 'settings.json');
 const mime = { '.html':'text/html; charset=utf-8', '.css':'text/css; charset=utf-8', '.js':'text/javascript; charset=utf-8', '.mjs':'text/javascript; charset=utf-8', '.json':'application/json; charset=utf-8', '.png':'image/png', '.jpg':'image/jpeg', '.jpeg':'image/jpeg', '.svg':'image/svg+xml', '.ico':'image/x-icon' };
 
 async function loadEnv() {
@@ -31,6 +32,30 @@ const pending = new Map();
 
 let memoryProducts = null;
 let memoryOrders = null;
+let memorySettings = null;
+
+async function getSettings() {
+  if (memorySettings) return memorySettings;
+  const defaults = {
+    whatsappNumber: process.env.WHATSAPP_NUMBER || '919325890000',
+    storeName: 'Shubh Samagri'
+  };
+  try {
+    const raw = await readFile(settingsFile, 'utf8');
+    memorySettings = { ...defaults, ...JSON.parse(raw.replace(/^\uFEFF/, '')) };
+  } catch {
+    memorySettings = defaults;
+  }
+  return memorySettings;
+}
+
+async function saveSettings(next) {
+  memorySettings = { ...(await getSettings()), ...next };
+  try {
+    await writeFile(settingsFile, JSON.stringify(memorySettings, null, 2) + '\n', 'utf8');
+  } catch {}
+  return memorySettings;
+}
 
 async function readJson(file, fallback) {
   if (file === productsFile && memoryProducts) return memoryProducts;
@@ -134,73 +159,95 @@ async function handle(req, res) {
   const url = new URL(targetPath, `http://${req.headers.host || 'localhost'}`);
   const pathname = decodeURIComponent(url.pathname);
   if (pathname.startsWith('/api/')) {
-    if ((req.method === 'GET' || req.method === 'HEAD') && pathname === '/api/products') return send(res, 200, await catalog());
-    if ((req.method === 'GET' || req.method === 'HEAD') && pathname === '/api/config') return send(res, 200, { paymentsEnabled:Boolean(razorpayKeyId && razorpayKeySecret), razorpayKeyId:razorpayKeyId || null });
-    if (req.method === 'POST' && pathname === '/api/admin/login') {
-      const input = await body(req);
-      if (!equalSecret(input.password || '', adminPassword)) return send(res, 401, { error:'Password sahi nahi hai.' });
-      const token = crypto.randomBytes(32).toString('hex'); sessions.add(token);
-      return send(res, 200, { token });
-    }
-    if (req.method === 'POST' && pathname === '/api/admin/logout') {
-      const token = (req.headers.authorization || '').replace(/^Bearer\s+/i, ''); sessions.delete(token); return send(res, 200, { ok:true });
-    }
-    if (pathname.startsWith('/api/admin/') && !isAdmin(req)) return send(res, 401, { error:'Admin login zaroori hai.' });
-    if (req.method === 'PATCH' && pathname === '/api/admin/products') {
-      const input = await body(req);
-      if (!Array.isArray(input.products)) return send(res, 400, { error:'Product list bhejein.' });
-      const products = input.products.map(safeProduct);
-      if (products.some(product => !product.id || !product.name || !product.category || product.price <= 0) || new Set(products.map(product => product.id)).size !== products.length) return send(res, 400, { error:'Products ke naam, ID aur rates check karein.' });
-      await writeJson(productsFile, products); return send(res, 200, products);
-    }
-    if ((req.method === 'GET' || req.method === 'HEAD') && pathname === '/api/admin/orders') return send(res, 200, await allOrders());
-    if (req.method === 'PATCH' && pathname.startsWith('/api/admin/orders/')) {
-      const id = pathname.split('/').at(-1); const input = await body(req);
-      const allowed = ['New','Processing','Packed','Shipped','Delivered','Cancelled'];
-      if (!allowed.includes(input.status)) return send(res, 400, { error:'Order status valid nahi hai.' });
-      const orders = await allOrders(); const order = orders.find(item => item.id === id);
-      if (!order) return send(res, 404, { error:'Order nahi mila.' });
-      order.status = input.status; await writeJson(ordersFile, orders); return send(res, 200, order);
-    }
-    if (req.method === 'POST' && pathname === '/api/payment/create-order') {
-      const input = await body(req); const customer = customerFields(input); const totals = totalFor(await catalog(), input.items);
-      if (input.paymentMethod === 'cod') {
-        const order = await createLocalOrder(customer, totals, 'cod', 'cash-on-delivery');
-        return send(res, 201, { mode:'cod', orderId:order.id });
-      }
-      if (!razorpayKeyId || !razorpayKeySecret) return send(res, 503, { error:'Online payment abhi set up nahi hua. Admin ko Razorpay keys add karni hongi.' });
-      const response = await fetch('https://api.razorpay.com/v1/orders', {
-        method:'POST', headers:{ 'Content-Type':'application/json', 'Authorization':'Basic ' + Buffer.from(`${razorpayKeyId}:${razorpayKeySecret}`).toString('base64') },
-        body:JSON.stringify({ amount:totals.total * 100, currency:'INR', receipt:`ss_${Date.now()}`, notes:{ shop:'Shubh Samagri' } })
-      });
-      const gateway = await response.json();
-      if (!response.ok) return send(res, 502, { error:'Payment provider se order create nahi hua. Gateway credentials check karein.' });
-      pending.set(gateway.id, { customer, totals, createdAt:Date.now() });
-      return send(res, 201, { mode:'razorpay', keyId:razorpayKeyId, gatewayOrderId:gateway.id, amount:gateway.amount, currency:gateway.currency, name:'Shubh Samagri' });
-    }
-    if (req.method === 'POST' && pathname === '/api/payment/verify') {
-      const input = await body(req); const checkout = pending.get(input.razorpay_order_id);
-      if (!checkout || Date.now() - checkout.createdAt > 30 * 60 * 1000) return send(res, 400, { error:'Payment session expire ho gaya. Checkout phir se shuru karein.' });
-      const expected = crypto.createHmac('sha256', razorpayKeySecret).update(`${input.razorpay_order_id}|${input.razorpay_payment_id}`).digest('hex');
-      if (!equalSecret(expected, input.razorpay_signature || '')) return send(res, 400, { error:'Payment verify nahi hua.' });
-      if (!/^pay_[A-Za-z0-9]+$/.test(input.razorpay_payment_id || '')) return send(res, 400, { error:'Payment ID valid nahi hai.' });
-      const authorization = 'Basic ' + Buffer.from(`${razorpayKeyId}:${razorpayKeySecret}`).toString('base64');
-      const paymentResponse = await fetch(`https://api.razorpay.com/v1/payments/${encodeURIComponent(input.razorpay_payment_id)}`, { headers:{ 'Authorization':authorization } });
-      let payment = await paymentResponse.json();
-      if (!paymentResponse.ok || payment.order_id !== input.razorpay_order_id || payment.amount !== checkout.totals.total * 100 || payment.currency !== 'INR') return send(res, 400, { error:'Payment ka amount ya order match nahi hua.' });
-      if (payment.status === 'authorized') {
-        const captureResponse = await fetch(`https://api.razorpay.com/v1/payments/${encodeURIComponent(input.razorpay_payment_id)}/capture`, {
-          method:'POST', headers:{ 'Content-Type':'application/json', 'Authorization':authorization },
-          body:JSON.stringify({ amount:payment.amount, currency:'INR' })
+    try {
+      if ((req.method === 'GET' || req.method === 'HEAD') && pathname === '/api/products') return send(res, 200, await catalog());
+      if ((req.method === 'GET' || req.method === 'HEAD') && pathname === '/api/config') {
+        const settings = await getSettings();
+        return send(res, 200, {
+          paymentsEnabled: Boolean(razorpayKeyId && razorpayKeySecret),
+          razorpayKeyId: razorpayKeyId || null,
+          whatsappNumber: settings.whatsappNumber,
+          storeName: settings.storeName
         });
-        payment = await captureResponse.json();
-        if (!captureResponse.ok) return send(res, 502, { error:'Payment authorize hua par capture nahi ho saka. Order ko admin se check karein.' });
       }
-      if (payment.status !== 'captured' || payment.captured !== true) return send(res, 409, { error:'Payment abhi capture nahi hua. Store admin se sampark karein.' });
-      const order = await createLocalOrder(checkout.customer, checkout.totals, 'razorpay', 'paid', input.razorpay_payment_id); pending.delete(input.razorpay_order_id);
-      return send(res, 200, { ok:true, orderId:order.id });
+      if ((req.method === 'GET' || req.method === 'HEAD') && pathname === '/api/settings') {
+        return send(res, 200, await getSettings());
+      }
+      if (req.method === 'PATCH' && pathname === '/api/admin/settings') {
+        const input = await body(req);
+        const updated = await saveSettings(input);
+        return send(res, 200, updated);
+      }
+      if (req.method === 'POST' && pathname === '/api/admin/login') {
+        const input = await body(req);
+        if (!equalSecret(input.password || '', adminPassword)) return send(res, 401, { error:'Password sahi nahi hai.' });
+        const token = crypto.randomBytes(32).toString('hex'); sessions.add(token);
+        return send(res, 200, { token });
+      }
+      if (req.method === 'POST' && pathname === '/api/admin/logout') {
+        const token = (req.headers.authorization || '').replace(/^Bearer\s+/i, ''); sessions.delete(token); return send(res, 200, { ok:true });
+      }
+      if (pathname.startsWith('/api/admin/') && !isAdmin(req)) return send(res, 401, { error:'Admin login zaroori hai.' });
+      if (req.method === 'PATCH' && pathname === '/api/admin/products') {
+        const input = await body(req);
+        if (!Array.isArray(input.products)) return send(res, 400, { error:'Product list bhejein.' });
+        const products = input.products.map(safeProduct);
+        if (products.some(product => !product.id || !product.name || !product.category || product.price <= 0) || new Set(products.map(product => product.id)).size !== products.length) return send(res, 400, { error:'Products ke naam, ID aur rates check karein.' });
+        await writeJson(productsFile, products); return send(res, 200, products);
+      }
+      if ((req.method === 'GET' || req.method === 'HEAD') && pathname === '/api/admin/orders') return send(res, 200, await allOrders());
+      if (req.method === 'PATCH' && pathname.startsWith('/api/admin/orders/')) {
+        const id = pathname.split('/').at(-1); const input = await body(req);
+        const allowed = ['New','Processing','Packed','Shipped','Delivered','Cancelled'];
+        if (!allowed.includes(input.status)) return send(res, 400, { error:'Order status valid nahi hai.' });
+        const orders = await allOrders(); const order = orders.find(item => item.id === id);
+        if (!order) return send(res, 404, { error:'Order nahi mila.' });
+        order.status = input.status; await writeJson(ordersFile, orders); return send(res, 200, order);
+      }
+      if (req.method === 'POST' && pathname === '/api/payment/create-order') {
+        const input = await body(req); const customer = customerFields(input); const totals = totalFor(await catalog(), input.items);
+        if (input.paymentMethod === 'cod') {
+          const order = await createLocalOrder(customer, totals, 'cod', 'cash-on-delivery');
+          const settings = await getSettings();
+          return send(res, 201, { mode:'cod', orderId:order.id, order, whatsappNumber:settings.whatsappNumber });
+        }
+        if (!razorpayKeyId || !razorpayKeySecret) return send(res, 503, { error:'Online payment abhi set up nahi hua. Admin ko Razorpay keys add karni hongi.' });
+        const response = await fetch('https://api.razorpay.com/v1/orders', {
+          method:'POST', headers:{ 'Content-Type':'application/json', 'Authorization':'Basic ' + Buffer.from(`${razorpayKeyId}:${razorpayKeySecret}`).toString('base64') },
+          body:JSON.stringify({ amount:totals.total * 100, currency:'INR', receipt:`ss_${Date.now()}`, notes:{ shop:'Shubh Samagri' } })
+        });
+        const gateway = await response.json();
+        if (!response.ok) return send(res, 502, { error:'Payment provider se order create nahi hua. Gateway credentials check karein.' });
+        pending.set(gateway.id, { customer, totals, createdAt:Date.now() });
+        return send(res, 201, { mode:'razorpay', keyId:razorpayKeyId, gatewayOrderId:gateway.id, amount:gateway.amount, currency:gateway.currency, name:'Shubh Samagri' });
+      }
+      if (req.method === 'POST' && pathname === '/api/payment/verify') {
+        const input = await body(req); const checkout = pending.get(input.razorpay_order_id);
+        if (!checkout || Date.now() - checkout.createdAt > 30 * 60 * 1000) return send(res, 400, { error:'Payment session expire ho gaya. Checkout phir se shuru karein.' });
+        const expected = crypto.createHmac('sha256', razorpayKeySecret).update(`${input.razorpay_order_id}|${input.razorpay_payment_id}`).digest('hex');
+        if (!equalSecret(expected, input.razorpay_signature || '')) return send(res, 400, { error:'Payment verify nahi hua.' });
+        if (!/^pay_[A-Za-z0-9]+$/.test(input.razorpay_payment_id || '')) return send(res, 400, { error:'Payment ID valid nahi hai.' });
+        const authorization = 'Basic ' + Buffer.from(`${razorpayKeyId}:${razorpayKeySecret}`).toString('base64');
+        const paymentResponse = await fetch(`https://api.razorpay.com/v1/payments/${encodeURIComponent(input.razorpay_payment_id)}`, { headers:{ 'Authorization':authorization } });
+        let payment = await paymentResponse.json();
+        if (!paymentResponse.ok || payment.order_id !== input.razorpay_order_id || payment.amount !== checkout.totals.total * 100 || payment.currency !== 'INR') return send(res, 400, { error:'Payment ka amount ya order match nahi hua.' });
+        if (payment.status === 'authorized') {
+          const captureResponse = await fetch(`https://api.razorpay.com/v1/payments/${encodeURIComponent(input.razorpay_payment_id)}/capture`, {
+            method:'POST', headers:{ 'Content-Type':'application/json', 'Authorization':authorization },
+            body:JSON.stringify({ amount:payment.amount, currency:'INR' })
+          });
+          payment = await captureResponse.json();
+          if (!captureResponse.ok) return send(res, 502, { error:'Payment authorize hua par capture nahi ho saka. Order ko admin se check karein.' });
+        }
+        if (payment.status !== 'captured' || payment.captured !== true) return send(res, 409, { error:'Payment abhi capture nahi hua. Store admin se sampark karein.' });
+        const order = await createLocalOrder(checkout.customer, checkout.totals, 'razorpay', 'paid', input.razorpay_payment_id); pending.delete(input.razorpay_order_id);
+        const settings = await getSettings();
+        return send(res, 200, { ok:true, orderId:order.id, order, whatsappNumber:settings.whatsappNumber });
+      }
+      return send(res, 404, { error:'API route nahi mila.' });
+    } catch (err) {
+      return send(res, 400, { error: err.message || 'Request process nahi ho payi.' });
     }
-    return send(res, 404, { error:'API route nahi mila.' });
   }
   let filePath = pathname === '/' ? path.join(root, 'index.html') : path.resolve(root, `.${pathname}`);
   if (filePath !== root && !filePath.startsWith(root + path.sep)) return send(res, 403, { error:'Forbidden' });

@@ -38,7 +38,7 @@ function renderHeader() {
   header.innerHTML = `<div class="topline">✦ &nbsp;Har shubh mauke ke liye pyaar se chuni hui samagri &nbsp;✦</div>
   <header class="site-header"><div class="head-main"><button class="mobile-menu-btn" id="mobile-menu-toggle" aria-label="Menu" aria-expanded="false">☰</button><a class="brand" href="index.html"><span class="brand-mark">ॐ</span><span><span class="brand-name">Shubh Samagri</span><small class="brand-note">Riwaaz, ghar tak</small></span></a>
   <form class="searchbox" action="shop.html"><input name="q" placeholder="Diya, agarbatti, puja kit dhoondhein..." aria-label="Search products"><button aria-label="Search" type="submit">⌕</button></form>
-  <div class="head-actions"><a href="about.html" class="head-action"><b>✿</b><span class="label">Hamari kahani</span></a><a href="cart.html" class="head-action cart-link" aria-label="Bag"><b>🛍️</b><span class="label">Bag</span><i class="cart-count">0</i></a></div></div>
+  <div class="head-actions"><a href="about.html" class="head-action"><b>✿</b><span class="label">Hamari kahani</span></a><a href="admin.html" class="head-action" aria-label="Store Admin" title="Store Admin"><b>⚙️</b><span class="label">Admin</span></a><a href="cart.html" class="head-action cart-link" aria-label="Bag"><b>🛍️</b><span class="label">Bag</span><i class="cart-count">0</i></a></div></div>
   <div class="nav-row" id="site-nav"><nav class="main-nav"><a class="${current==='home'?'active':''}" href="index.html">Home</a><a class="${current==='shop'?'active':''}" href="shop.html">Saari samagri</a><a href="shop.html?category=kits">Puja kits</a><a href="shop.html?category=essentials">Daily pooja</a><a href="shop.html?category=havan">Havan & aarti</a><a class="${current==='about'?'active':''}" href="about.html">Hamare baare mein</a></nav></div></header>`;
 
   const btn = document.getElementById('mobile-menu-toggle');
@@ -68,7 +68,7 @@ function renderHeader() {
 }
 function renderFooter() {
   const footer = document.getElementById('site-footer'); if (!footer) return;
-  footer.innerHTML = `<footer class="site-footer"><div class="footer-grid"><div><a class="brand footer-brand" href="index.html"><span class="brand-mark">ॐ</span><span><span class="brand-name">Shubh Samagri</span><small class="brand-note" style="color:#cdbbb0">Riwaaz, ghar tak</small></span></a><p class="footer-about">Roz ki pooja se tyoharon ki taiyaari tak — aapke ghar ke riwaazon ke liye pyaar se chuni hui samagri.</p></div><div class="footer-col"><h3>Shop karein</h3><a href="shop.html">Saari samagri</a><a href="shop.html?category=kits">Puja kits</a><a href="shop.html?category=essentials">Daily pooja</a><a href="shop.html?category=havan">Havan & aarti</a></div><div class="footer-col"><h3>Madad</h3><a href="about.html#delivery">Delivery ki jaankari</a><a href="about.html#contact">Contact</a><a href="cart.html">Aapka bag</a></div><div class="footer-col"><h3>Ghar ki khushboo</h3><p>Naye products aur tyohar ki taiyaari ki khabrein paaen.</p><form class="newsletter-form" style="margin:0" onsubmit="event.preventDefault();toast('Dhanyavaad! Aapki email save ho gayi.')"><input required type="email" placeholder="Email address" aria-label="Email address"><button class="btn btn-small" type="submit">Join</button></form></div></div><div class="footer-bottom"><span>© ${new Date().getFullYear()} Shubh Samagri · Dil se chuna, shraddha se bheja</span><span>Payment & delivery options checkout par dikhenge</span></div></footer>`;
+  footer.innerHTML = `<footer class="site-footer"><div class="footer-grid"><div><a class="brand footer-brand" href="index.html"><span class="brand-mark">ॐ</span><span><span class="brand-name">Shubh Samagri</span><small class="brand-note" style="color:#cdbbb0">Riwaaz, ghar tak</small></span></a><p class="footer-about">Roz ki pooja se tyoharon ki taiyaari tak — aapke ghar ke riwaazon ke liye pyaar se chuni hui samagri.</p></div><div class="footer-col"><h3>Shop karein</h3><a href="shop.html">Saari samagri</a><a href="shop.html?category=kits">Puja kits</a><a href="shop.html?category=essentials">Daily pooja</a><a href="shop.html?category=havan">Havan & aarti</a></div><div class="footer-col"><h3>Madad & Admin</h3><a href="about.html#delivery">Delivery ki jaankari</a><a href="about.html#contact">Contact</a><a href="cart.html">Aapka bag</a><a href="admin.html" style="color:#f0cd8d;font-weight:700">⚙️ Store Admin Panel</a></div><div class="footer-col"><h3>Ghar ki khushboo</h3><p>Naye products aur tyohar ki taiyaari ki khabrein paaen.</p><form class="newsletter-form" style="margin:0" onsubmit="event.preventDefault();toast('Dhanyavaad! Aapki email save ho gayi.')"><input required type="email" placeholder="Email address" aria-label="Email address"><button class="btn btn-small" type="submit">Join</button></form></div></div><div class="footer-bottom"><span>© ${new Date().getFullYear()} Shubh Samagri · Dil se chuna, shraddha se bheja</span><span>Payment & delivery options checkout par dikhenge</span></div></footer>`;
 }
 function productCard(product) {
   const favorite = getFavorites().includes(product.id);
@@ -127,23 +127,77 @@ async function renderCheckout() {
 async function placeOrder(event) {
   event.preventDefault(); const form=event.currentTarget; const submit=form.querySelector('#submit-order'); submit.disabled=true; submit.textContent='Order tayyar ho raha hai...';
   const data=new FormData(form); const customer={name:data.get('name'),phone:data.get('phone'),email:data.get('email'),address:data.get('address'),city:data.get('city'),pincode:data.get('pincode')};
-  const paymentMethod=data.get('paymentMethod')||'cod'; const items=getCart();
+  const paymentMethod=data.get('paymentMethod')||'cod'; const items=getCart(); const summary=totals(items);
   try {
     const response=await fetch('/api/payment/create-order',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({customer,items,paymentMethod})}); const result=await response.json();
     if(!response.ok) throw new Error(result.error||'Order create nahi hua.');
-    if(result.mode==='cod'){ finishOrder(result.orderId,'Cash on Delivery'); return; }
+    const meta = { customer, items, summary, whatsappNumber: result.whatsappNumber };
+    if(result.mode==='cod'){ finishOrder(result.orderId,'Cash on Delivery', meta); return; }
     const script=document.createElement('script'); script.src='https://checkout.razorpay.com/v1/checkout.js'; script.onload=()=>{
       const gateway=new Razorpay({key:result.keyId,amount:result.amount,currency:result.currency,name:result.name,description:'Puja samagri order',order_id:result.gatewayOrderId,prefill:{name:customer.name,email:customer.email,contact:customer.phone},theme:{color:'#6e2924'},handler:async response=>{
-        try{const verified=await fetch('/api/payment/verify',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(response)});const confirmation=await verified.json();if(!verified.ok)throw new Error(confirmation.error);finishOrder(confirmation.orderId,'Online payment');}
+        try{const verified=await fetch('/api/payment/verify',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(response)});const confirmation=await verified.json();if(!verified.ok)throw new Error(confirmation.error);finishOrder(confirmation.orderId,'Online payment', meta);}
         catch(error){toast(error.message||'Payment verify nahi hua.');submit.disabled=false;submit.textContent='Phir se koshish karein';}
       }});
       gateway.on('payment.failed',()=>{toast('Payment poora nahi hua. Aap dobara koshish kar sakte hain.');submit.disabled=false;submit.textContent='Phir se koshish karein';}); gateway.open();
     }; script.onerror=()=>{toast('Payment window load nahi hui. Internet connection check karein.');submit.disabled=false;submit.textContent='Phir se koshish karein';}; document.head.append(script);
   } catch(error){toast(error.message||'Kuch gadbad hui.');submit.disabled=false;submit.textContent='Order phir se bhejein';}
 }
-function finishOrder(orderId,method) {
-  saveCart([]); document.getElementById('checkout-content').innerHTML=`<div class="success-panel"><div class="success-icon">🪔</div><div class="eyebrow">Order confirm ho gaya</div><h1>Dhanyavaad, aapka order mil gaya.</h1><p>Order number: <strong>${escapeHtml(orderId)}</strong></p><p>${escapeHtml(method)} · Hamari team jald aapka order tayyar karegi.</p><a class="btn" href="shop.html">Aur samagri dekhein</a></div>`;
-  document.title='Order confirm · Shubh Samagri';
+function formatWhatsAppOrder(orderId, method, meta) {
+  const customer = meta?.customer || {};
+  const items = meta?.items || [];
+  const summary = meta?.summary || { total: 0 };
+  const lines = [
+    `*Namaste Shubh Samagri!* 🙏`,
+    `Mera naya order details:`,
+    ``,
+    `📦 *Order ID:* ${orderId}`,
+    `👤 *Grahak:* ${customer.name || '-'}`,
+    `📞 *Mobile:* ${customer.phone || '-'}`,
+    `📍 *Pata:* ${customer.address || '-'}, ${customer.city || ''} - ${customer.pincode || ''}`,
+    ``,
+    `🛒 *Items:*`
+  ];
+  items.forEach(item => {
+    const p = products.find(prod => prod.id === item.id) || item;
+    lines.push(`• ${p.name || item.name} (${item.quantity} pcs) - ₹${((p.price || item.price || 0) * item.quantity).toLocaleString('en-IN')}`);
+  });
+  lines.push(``);
+  lines.push(`💰 *Total Amount:* ₹${Number(summary.total || 0).toLocaleString('en-IN')}`);
+  lines.push(`💳 *Payment Method:* ${method}`);
+  lines.push(``);
+  lines.push(`Kripya mera order confirm karein! 🪔`);
+  return lines.join('\n');
+}
+function finishOrder(orderId, method, meta) {
+  saveCart([]);
+  const waNumber = String(meta?.whatsappNumber || localStorage.getItem('ss-whatsapp-number') || '919325890000').replace(/\D/g, '');
+  const message = formatWhatsAppOrder(orderId, method, meta);
+  const waUrl = `https://wa.me/${waNumber}?text=${encodeURIComponent(message)}`;
+
+  document.getElementById('checkout-content').innerHTML = `
+    <div class="success-panel">
+      <div class="success-icon">🪔</div>
+      <div class="eyebrow">Order confirm ho gaya</div>
+      <h1>Dhanyavaad, aapka order mil gaya!</h1>
+      <p>Order number: <strong style="color:var(--wine)">${escapeHtml(orderId)}</strong></p>
+      <p>${escapeHtml(method)} · Hamari team jald aapka parcel tayyar karegi.</p>
+
+      <div class="whatsapp-box">
+        <div style="font-size:36px;margin-bottom:8px">💬</div>
+        <h3>Order WhatsApp par bhejein</h3>
+        <p>Dukan wale ko apna order turant WhatsApp par bhej kar confirm karein!</p>
+        <a class="btn btn-whatsapp" href="${waUrl}" target="_blank" rel="noopener">
+          <span>💬</span> WhatsApp par Order Confirm Karein &nbsp;→
+        </a>
+      </div>
+
+      <div style="margin-top:24px;display:flex;gap:12px;justify-content:center;flex-wrap:wrap">
+        <a class="btn secondary btn-small" href="shop.html">Aur samagri dekhein</a>
+        <a class="btn secondary btn-small" href="admin.html">Store Admin dekhein</a>
+      </div>
+    </div>
+  `;
+  document.title = 'Order confirm · Shubh Samagri';
 }
 function addToCart(id, quantity=1) {
   const product=products.find(item=>item.id===id); if(!product)return;
