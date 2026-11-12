@@ -4,7 +4,7 @@ const escapeHtml = value => String(value ?? '').replace(/[&<>"']/g, char => ({'&
 
 let products = [];
 let orders = [];
-let settings = { whatsappNumber: '919325890000', storeName: 'Shubh Samagri' };
+let settings = { whatsappNumber: '918507648252', storeName: 'Delhi Ki Dukan' };
 let section = 'overview';
 
 const token = () => sessionStorage.getItem('ss-admin-token') || '';
@@ -147,7 +147,7 @@ function renderOrders() {
     const cust = order.customer || {};
     const rawPhone = String(cust.phone || '').replace(/\D/g, '');
     const waPhone = rawPhone.startsWith('91') ? rawPhone : (rawPhone.length === 10 ? '91' + rawPhone : rawPhone);
-    const waText = `*Namaste ${cust.name || 'Grahak'} ji!* 🙏\nShubh Samagri se aapka order *${order.id}* receive ho chuka hai.\n*Status:* ${order.status}\n*Total:* ${money(order.total)}\nAapka parcel jald dispatch hoga. Dhanyavaad! 🪔`;
+    const waText = `*Namaste ${cust.name || 'Grahak'} ji!* 🙏\nDelhi Ki Dukan (Arrah) se aapka order *${order.id}* receive ho chuka hai.\n*Status:* ${order.status}\n*Total:* ${money(order.total)}\nAapka parcel jald dispatch hoga. Dhanyavaad! 🪔`;
     const waUrl = `https://wa.me/${waPhone}?text=${encodeURIComponent(waText)}`;
 
     return `

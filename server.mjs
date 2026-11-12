@@ -37,8 +37,15 @@ let memorySettings = null;
 async function getSettings() {
   if (memorySettings) return memorySettings;
   const defaults = {
-    whatsappNumber: process.env.WHATSAPP_NUMBER || '919325890000',
-    storeName: 'Shubh Samagri'
+    whatsappNumber: process.env.WHATSAPP_NUMBER || '918507648252',
+    storeName: 'Delhi Ki Dukan',
+    phone: '+91 8507648252',
+    address: 'Chitra Toli Road, Imam Bara, Tari Mohalla, Arrah, Bihar 802301',
+    city: 'Arrah',
+    state: 'Bihar',
+    pincode: '802301',
+    timings: '10:00 AM – 8:30 PM',
+    mapUrl: 'https://www.google.com/maps/search/?api=1&query=25.5648353,84.6705372'
   };
   try {
     const raw = await readFile(settingsFile, 'utf8');

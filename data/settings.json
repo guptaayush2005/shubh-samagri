@@ -1,5 +1,13 @@
 {
-  "whatsappNumber": "919325890000",
-  "storeName": "Shubh Samagri",
+  "storeName": "Delhi Ki Dukan",
+  "tagline": "Pooja, Hawan & Jadi Booti Samagri",
+  "whatsappNumber": "918507648252",
+  "phone": "+91 8507648252",
+  "address": "Chitra Toli Road, Imam Bara, Tari Mohalla, Arrah, Bihar 802301",
+  "city": "Arrah",
+  "state": "Bihar",
+  "pincode": "802301",
+  "timings": "10:00 AM – 8:30 PM (Som-Shani), 10:00 AM – 2:00 PM (Ravi)",
+  "mapUrl": "https://www.google.com/maps/search/?api=1&query=25.5648353,84.6705372",
   "currency": "INR"
 }
